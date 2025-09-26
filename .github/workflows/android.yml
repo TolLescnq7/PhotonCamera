@@ -50,4 +50,4 @@ jobs:
         with:
           artifactName: PhotonCameraRelease.apk
           name: app
-          path: app/build/outputs/apk/release/PhotonCamera.apk
+          path: app/build/outputs/apk/release/PhotonCameraRelease.apk
