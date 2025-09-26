@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-      - uses: actions/cache@v4
       - name: Build debug APK
         run: bash ./gradlew assembleDebug --stacktrace
       - name: Build release APK
