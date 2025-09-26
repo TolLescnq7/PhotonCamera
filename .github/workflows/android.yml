@@ -50,7 +50,8 @@ jobs:
         with:
           artifactName: PhotonCameraRelease.apk
           name: app
-          path: app/build/outputs/apk/release/PhotonCameraRelease.apk          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          path: app/build/outputs/apk/release/PhotonCameraRelease.apk
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
           signedReleaseFile: app/build/outputs/apk/release/PhotonCamera.apk
       - name: Upload signed release APK
