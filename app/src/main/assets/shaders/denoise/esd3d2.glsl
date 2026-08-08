@@ -73,8 +73,8 @@ void main() {
     vec3 final_colour = vec3(0.0);
     vec3 final_colour2 = vec3(0.0);
     float sigX = 2.5;
-    //float sigY = (noisefactor*noisefactor*NOISES + NOISEO + 0.0000001);
-    float sigY = max(NOISES*noisefactor + NOISES*NOISES * 3.0/8.0 + noiseO, 0.0000001);
+    float sigY = max(NOISES*noisefactor + NOISEO, 0.0000001);
+    //float sigY = max(NOISES*noisefactor + NOISES*NOISES * 3.0/8.0 + NOISEO, 0.0000001);
     vec3 chromaDiff = (abs(cavg-cinX)+abs(cavg-cinY)+abs(cavg-cinXY)+abs(cavg-cin))/4.0;
     //chromaDiff *= (length(chromaDiff)/(length(chromaDiff)+sigY*64.0));
     chromaDiff *= max(abs(xDelta),abs(yDelta));
@@ -105,8 +105,12 @@ void main() {
             vec4 w = (1.0-d*d/(d*d + sigY));
             vec4 w2 = (1.0-d*d/(d*d + sigZ));
             float wm = min(min(min(w[0],w[1]),w[2]),w[3])*1.0;
-            w -= wm;
-            w2 -= wm;
+            vec4 ws = w - wm;
+            ws /= length(ws) + 0.000001;
+            vec4 w2s = w2 - wm;
+            w2s /= length(w2s) + 0.000001;
+            w *= ws;
+            w2 *= w2s;
             float f1 = normpdf(float(i),KERNELSIZE)*normpdf(float(j),KERNELSIZE);
             final_colour += f1*mat4x3(cc0,cc1,cc2,cc3)*w;
             final_colour2 += f1*mat4x3(cc0,cc1,cc2,cc3)*w2;

@@ -1,7 +1,9 @@
 precision highp float;
-precision mediump sampler2D;
+precision highp sampler2D;
 uniform sampler2D InputBuffer;
 uniform float mpy;
+uniform float whiteMax;
+uniform float applyGammaMix;
 out vec4 Output;
 vec3 reinhard_extended(vec3 v, float max_white){
     vec3 numerator = v * (vec3(1.0f) + (v / vec3(max_white * max_white)));
@@ -10,6 +12,10 @@ vec3 reinhard_extended(vec3 v, float max_white){
 vec2 reinhard_extended(vec2 v, float max_white){
     vec2 numerator = v * (vec2(1.0f) + (v / vec2(max_white * max_white)));
     return numerator / (vec2(1.0f) + v);
+}
+float reinhard_extended(float v, float max_white){
+    float numerator = v * (float(1.0f) + (v / float(max_white * max_white)));
+    return numerator / (float(1.0f) + v);
 }
 
 vec3 tonemap(vec3 rgb, float gain) {
@@ -22,13 +28,13 @@ vec3 tonemap(vec3 rgb, float gain) {
     float mid_val = dot(rgb, vec3(1.0)) - min_val - max_val;
 
     vec2 minmax_in = vec2(min_val, max_val);
-    vec2 minmax = vec2(reinhard_extended(minmax_in * gain, gain));
+    vec2 minmax = vec2(reinhard_extended(minmax_in * gain, whiteMax));
 
     float new_min = minmax.x;
     float new_max = minmax.y;
 
     float denom = max_val - min_val;
-    float yprog = (mid_val - min_val) / (denom + 1e-10);
+    float yprog = (mid_val - min_val) / (denom + 1e-6);
     float new_mid = new_min + (new_max - new_min) * yprog;
 
     // Branchless assignment using nested mix for each channel
@@ -42,5 +48,6 @@ void main() {
     ivec2 xy = ivec2(gl_FragCoord.xy);
     vec4 inp = texelFetch(InputBuffer, xy, 0);
     //Output.rgb = reinhard_extended(inp.rgb * mpy, mpy);
-    Output.rgb = tonemap(inp.rgb, mpy);
+    Output.rgb = tonemap(mix(inp.rgb,sqrt(inp.rgb), applyGammaMix), mpy);
+    Output.rgb = mix(Output.rgb,Output.rgb * Output.rgb, applyGammaMix);
 }

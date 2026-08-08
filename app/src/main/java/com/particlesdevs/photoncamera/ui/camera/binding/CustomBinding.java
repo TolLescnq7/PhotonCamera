@@ -101,6 +101,12 @@ public class CustomBinding {
             layout.setAuxButtonsModel(auxButtonsModel);
     }
 
+    @BindingAdapter("hideAuxButtons")
+    public static void setAuxButtonsHidden(AuxButtonsLayout layout, boolean hidden) {
+        if (layout != null)
+            layout.setAuxButtonsHidden(hidden);
+    }
+
     @BindingAdapter("setActiveId")
     public static void setActiveCameraId(AuxButtonsLayout layout, String cameraId) {
         if (cameraId != null)
@@ -132,6 +138,18 @@ public class CustomBinding {
             float dpWidth = displayMetrics.widthPixels / displayMetrics.density;
             float dpmargin = (dpHeight - (dpWidth / 9f * 16f));
             params.topMargin = (int) dpmargin;
+        }
+    }
+    
+    @BindingAdapter("setAspectRatio")
+    public static void setAspectRatio(View view, String ratio) {
+        if (view != null && ratio != null && !ratio.isEmpty()) {
+            ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+            if (layoutParams instanceof ConstraintLayout.LayoutParams) {
+                ConstraintLayout.LayoutParams params = (ConstraintLayout.LayoutParams) layoutParams;
+                params.dimensionRatio = ratio;
+                view.setLayoutParams(params);
+            }
         }
     }
 }

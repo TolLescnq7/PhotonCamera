@@ -9,7 +9,10 @@
 #include <string>
 
 struct DngMetadata {
+    int width = 0;
+    int height = 0;
     int orientation = 0; // Default orientation
+    unsigned short bps = 16; // Bits per sample
     bool compression = false;
     // White/Black levels
     double white_level = 1023.0;
@@ -47,6 +50,14 @@ struct DngMetadata {
     bool has_as_shot_neutral = false;
     bool has_as_shot_white_xy = false;
     bool has_analog_balance = false;
+    size_t strip_offset = 0;
+    unsigned short* delinearizationTable = nullptr;
+    double frame_rate = 0.0;
+    bool has_frame_rate = false;
+    bool binning = false;
+    bool binning_uses_average = false;
+    int original_width = 0;
+    int original_height = 0;
 };
 
 #ifdef __cplusplus
@@ -141,11 +152,26 @@ JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator
 JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_setNoiseProfile(
         JNIEnv *env, jobject obj, jlong creatorPtr, jdoubleArray noiseProfile);
 
+JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_setFrameRate(
+        JNIEnv *env, jobject obj, jlong creatorPtr, jdouble frameRate);
+
 JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_setCompression(
     JNIEnv *env, jobject obj, jlong creatorPtr, jboolean compression);
 
+JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_setBinning(
+    JNIEnv *env, jobject obj, jlong creatorPtr, jboolean binning);
+
 JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_destroy(
 JNIEnv *env, jobject obj, jlong creatorPtr);
+
+JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_openArchive(
+    JNIEnv *env, jobject obj, jlong creatorPtr, jstring path);
+
+JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_openArchiveByFd(
+    JNIEnv *env, jobject obj, jlong creatorPtr, jint fd);
+
+JNIEXPORT void JNICALL Java_com_particlesdevs_photoncamera_processing_DngCreator_closeArchive(
+    JNIEnv *env, jobject obj, jlong creatorPtr);
 
 #ifdef __cplusplus
 }

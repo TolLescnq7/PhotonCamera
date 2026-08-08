@@ -27,19 +27,28 @@ public class ImageFrame {
         return timestamp;
     }
 
-    public ImageFrame(ByteBuffer in, int format, int width, int row_stride) {
+    public ImageFrame(ByteBuffer in, int format, int width, int row_stride, int shift, int capacity) {
         ByteBuffer direct;
-        if(format == 0x25){
-            direct = Allocator.allocateAndCopyConvert(in.capacity(), in, width, row_stride);
+        if (Allocator.binning) {
+            int height = capacity / row_stride;
+            if (format == 0x25) {
+                direct = Allocator.allocateAndCopyConvertBinning(capacity, in, width, row_stride, shift);
+            } else {
+                direct = Allocator.allocateAndCopyBinning(capacity, in, width, height, row_stride);
+            }
         } else {
-            direct = Allocator.allocateAndCopy(in.capacity(), in);
+            if(format == 0x25){
+                direct = Allocator.allocateAndCopyConvert(capacity, in, width, row_stride, shift);
+            } else {
+                direct = Allocator.allocateAndCopy(capacity, in, shift);
+            }
         }
         direct.position(0);
         buffer = direct;
     }
 
     public ImageFrame(ByteBuffer in) {
-        ByteBuffer direct = Allocator.allocateAndCopy(in.capacity(), in);
+        ByteBuffer direct = Allocator.allocateAndCopy(in.capacity(), in, 0);
         direct.position(0);
         buffer = direct;
     }

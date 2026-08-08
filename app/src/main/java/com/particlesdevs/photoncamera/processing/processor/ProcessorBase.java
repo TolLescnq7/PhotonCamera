@@ -27,6 +27,7 @@ import android.hardware.camera2.CaptureResult;
 import com.particlesdevs.photoncamera.api.ParseExif;
 import com.particlesdevs.photoncamera.app.PhotonCamera;
 import com.particlesdevs.photoncamera.processing.ProcessingEventsListener;
+import com.particlesdevs.photoncamera.processing.render.Parameters;
 
 import java.nio.file.Path;
 
@@ -37,7 +38,7 @@ public abstract class ProcessorBase {
     public static float FAKE_WL = 65535.f;
     protected final ProcessingEventsListener processingEventsListener;
     protected Path dngFile;
-    protected Path jpgFile;
+    protected Path imageFile;
     protected CameraCharacteristics characteristics;
     protected CaptureResult captureResult;
     protected CaptureRequest captureRequest;
@@ -76,16 +77,16 @@ public abstract class ProcessorBase {
     public void process() {
     }
 
-    public void IncreaseWLBL() {
+    public void IncreaseWLBL(Parameters parameters) {
         //Increase WL and BL for processing
         for (int i = 0; i < 4; i++) {
-            PhotonCamera.getParameters().blackLevel[i] *= FAKE_WL / PhotonCamera.getParameters().whiteLevel;
+            parameters.blackLevel[i] *= FAKE_WL / parameters.whiteLevel;
         }
-        IncreaseWL();
+        IncreaseWL(parameters);
     }
 
-    public void IncreaseWL() {
-        PhotonCamera.getParameters().whiteLevel = (int) (FAKE_WL);
+    public void IncreaseWL(Parameters parameters) {
+        parameters.whiteLevel = (int) (FAKE_WL);
     }
 
     public interface ProcessingCallback {

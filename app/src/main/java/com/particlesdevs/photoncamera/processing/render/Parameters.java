@@ -11,6 +11,8 @@ import android.hardware.camera2.params.ColorSpaceTransform;
 import android.hardware.camera2.params.LensShadingMap;
 import android.os.Build;
 import android.os.Environment;
+
+import com.particlesdevs.photoncamera.settings.annotations.Tunable;
 import com.particlesdevs.photoncamera.util.Log;
 import android.util.Rational;
 import android.util.SizeF;
@@ -22,6 +24,7 @@ import com.particlesdevs.photoncamera.processing.parameters.ExposureIndex;
 import com.particlesdevs.photoncamera.processing.parameters.FrameNumberSelector;
 import com.particlesdevs.photoncamera.settings.PreferenceKeys;
 import com.particlesdevs.photoncamera.capture.CaptureController;
+import com.particlesdevs.photoncamera.util.Allocator;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -40,7 +43,6 @@ public class Parameters {
     public float[] blackLevel = new float[4];
     public float[] whitePoint = new float[3];
     public int whiteLevel = 1023;
-    public int rawWhiteLevel = 1023;
     public static int mergeWhiteLevel = 65535;
     public int realWL = -1;
     public boolean hasGainMap;
@@ -88,8 +90,49 @@ public class Parameters {
     public float[] calibrationTransform2 = new float[9];
     public float[] ForwardTransform2 = new float[9];
 
+    public boolean mirror = false;
+    public String cameraID = PhotonCamera.getSettings().mCameraID;
+    public int physicalID = 0;
+    public int logicalID = 0;
+
+    @Tunable(title = "Use Dynamic Black Level", category = "Parameters", defaultValue = 0, min = 0, max = 1, step = 1,
+            description = "Use dynamic black level from the camera2api capture result if available (may cause instability on some devices)"
+    )
+    boolean useDynamicBlackLevel;
+
+    @Tunable(title = "Use Dynamic White Level", category = "Parameters", defaultValue = 1, min = 0, max = 1, step = 1,
+            description = "Use dynamic black level from the camera2api capture result if available (may cause instability on some devices)"
+    )
+    boolean useDynamicWhiteLevel;
+
+    @Tunable(title = "Black Level Override", category = "Parameters",
+            defaultValue = -1.0f, min = -1.0f, max = 65535.f, step = 1.0f,
+            description = "Override black level for all channels -1 is disabled")
+    float blackLevelOverride;
+
+    @Tunable(title = "White Level Override", category = "Parameters",
+            defaultValue = -1, min = -1, max = 65535, step = 1,
+            description = "Override black level for all channels -1 is disabled")
+    int whiteLevelOverride;
+
+    @Tunable(title = "Disable front mirror", category = "Parameters", defaultValue = 0, min = 0, max = 1, step = 1,
+            description = "Disable front camera mirroring")
+    boolean disableMirror;
 
     public void FillConstParameters(CameraCharacteristics characteristics, Point size) {
+        com.particlesdevs.photoncamera.settings.TunableInjector.inject(this);
+        cameraID = PhotonCamera.getSettings().mCameraID;
+        // Split x-y, x - logical, y - physical
+        if(cameraID.contains("-")){
+            String[] ids = cameraID.split("-");
+            logicalID = Integer.parseInt(ids[0]);
+            physicalID = Integer.parseInt(ids[1]);
+            //isDualSession = true;
+        } else {
+            physicalID = Integer.parseInt(cameraID);
+            logicalID = Integer.parseInt(cameraID);
+        }
+
         rawSize = size;
         alignmentSize = new Point((size.x / (tile)) + 1, (size.y / (tile)) + 1);
         tilesX = (rawSize.x / 800) + 1;
@@ -156,7 +199,6 @@ public class Parameters {
 
         Object whiteLevel = characteristics.get(CameraCharacteristics.SENSOR_INFO_WHITE_LEVEL);
         if (whiteLevel != null) this.whiteLevel = ((int) whiteLevel);
-        rawWhiteLevel = this.whiteLevel;
         hasGainMap = false;
         mapSize = new Point(1, 1);
         gainMap = new float[4];
@@ -167,6 +209,13 @@ public class Parameters {
         sensorPix = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
         if (sensorPix == null) {
             sensorPix = new Rect(0, 0, rawSize.x, rawSize.y);
+        }
+        var facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+        if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+            mirror = true;
+        }
+        if(disableMirror){
+            mirror = false;
         }
         //hotPixels = PhotonCamera.getCameraFragment().mHotPixelMap;
     }
@@ -196,40 +245,51 @@ public class Parameters {
         if (result != null) {
             boolean isHuawei = Build.BRAND.equals("Huawei");
 
-            float[] dynbl = result.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL);
-            /*if (dynbl != null) {
-                System.arraycopy(dynbl, 0, blackLevel, 0, 4);
-                usedDynamic = true;
-            }*/
+            if(useDynamicBlackLevel) {
+                float[] dynbl = result.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL);
+                if (dynbl != null) {
+                    System.arraycopy(dynbl, 0, blackLevel, 0, 4);
+                    usedDynamic = true;
+                }
+            }
             Object white = result.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL);
-            if (white != null) {
+            if (white != null && useDynamicWhiteLevel) {
                 whiteLevel = (int) white;
             }
 
-            LensShadingMap lensMap = result.get(CaptureResult.STATISTICS_LENS_SHADING_CORRECTION_MAP);
-            if (lensMap != null) {
-                gainMap = new float[lensMap.getGainFactorCount()];
-                mapSize = new Point(lensMap.getColumnCount(), lensMap.getRowCount());
-                lensMap.copyGainFactors(gainMap, 0);
-                hasGainMap = true;
-                if ((gainMap[(gainMap.length / 8) - (gainMap.length / 8) % 4]) == 1.0 &&
-                        (gainMap[(gainMap.length / 2) - (gainMap.length / 2) % 4]) == 1.0 &&
-                        (gainMap[(gainMap.length / 2 + gainMap.length / 8) - (gainMap.length / 2 + gainMap.length / 8) % 4]) == 1.0) {
-                    hasGainMap = false;
-                    if (isHuawei) {
-                        Log.d(TAG, "DETECTED FAKE GAINMAP, REPLACING WITH STATIC GAINMAP");
-                        gainMap = new float[Const.gainMap.length];
-                        for (int i = 0; i < Const.gainMap.length; i += 4) {
-                            float in = (float) Const.gainMap[i] + (float) Const.gainMap[i + 1] + (float) Const.gainMap[i + 2] + (float) Const.gainMap[i + 3];
-                            in /= 4.f;
-                            gainMap[i] = in;
-                            gainMap[i + 1] = in;
-                            gainMap[i + 2] = in;
-                            gainMap[i + 3] = in;
+            if(whiteLevelOverride >= 0) {
+                whiteLevel = (int) whiteLevelOverride;
+            }
+            try {
+                gainMap = new float[]{1.f, 1.f, 1.f, 1.f};
+                mapSize = new Point(1, 1);
+                LensShadingMap lensMap = result.get(CaptureResult.STATISTICS_LENS_SHADING_CORRECTION_MAP);
+                if (lensMap != null) {
+                    gainMap = new float[lensMap.getGainFactorCount()];
+                    mapSize = new Point(lensMap.getColumnCount(), lensMap.getRowCount());
+                    lensMap.copyGainFactors(gainMap, 0);
+                    hasGainMap = true;
+                    if ((gainMap[(gainMap.length / 8) - (gainMap.length / 8) % 4]) == 1.0 &&
+                            (gainMap[(gainMap.length / 2) - (gainMap.length / 2) % 4]) == 1.0 &&
+                            (gainMap[(gainMap.length / 2 + gainMap.length / 8) - (gainMap.length / 2 + gainMap.length / 8) % 4]) == 1.0) {
+                        hasGainMap = false;
+                        if (isHuawei) {
+                            Log.d(TAG, "DETECTED FAKE GAINMAP, REPLACING WITH STATIC GAINMAP");
+                            gainMap = new float[Const.gainMap.length];
+                            for (int i = 0; i < Const.gainMap.length; i += 4) {
+                                float in = (float) Const.gainMap[i] + (float) Const.gainMap[i + 1] + (float) Const.gainMap[i + 2] + (float) Const.gainMap[i + 3];
+                                in /= 4.f;
+                                gainMap[i] = in;
+                                gainMap[i + 1] = in;
+                                gainMap[i + 2] = in;
+                                gainMap[i + 3] = in;
+                            }
+                            mapSize = Const.mapSize;
                         }
-                        mapSize = Const.mapSize;
                     }
                 }
+            } catch (Exception e){
+                Log.d(TAG, "Error retrieving lens shading map, disabling gain map: " + Log.getStackTraceString(e));
             }
             hotPixels = result.get(CaptureResult.STATISTICS_HOT_PIXEL_MAP);
             ReCalcColor(false, result);
@@ -239,6 +299,9 @@ public class Parameters {
                 level.copyTo(blarr, 0);
                 for (int i = 0; i < 4; i++) blackLevel[i] = blarr[i];
             }
+        if(blackLevelOverride >= 0) {
+            for (int i = 0; i < 4; i++) blackLevel[i] = blackLevelOverride;
+        }
         Float aperture = result.get(CaptureResult.LENS_APERTURE);
         if (aperture == null) {
             aperture = request.get(CaptureRequest.LENS_APERTURE);
@@ -257,6 +320,12 @@ public class Parameters {
         }
         this.focalLength = focalLength;
 
+        if (Allocator.binning) {
+            for (int i = 0; i < blackLevel.length; i++) {
+                blackLevel[i] = Math.min(blackLevel[i] * 4f, 65535f);
+            }
+            whiteLevel = Math.min(whiteLevel * 4, 65535);
+        }
     }
 
 
@@ -321,8 +390,41 @@ public class Parameters {
             }
 
         }
-        //Log.d(TAG, "Using custom color transform 1:"+ colorMat1.toString());
-
+        // Check if forward matrices have each component non-zero, otherwise replace with identity
+        boolean invertible = true;
+        for (int i = 0; i < 3; i++) {
+            float sum = 0.0f;
+            for (int j = 0; j < 3; j++) {
+                if (forwardt1 != null)
+                    sum += Math.abs(forwardt1.getElement(i, j).floatValue());
+            }
+            if(sum == 0.0f) invertible = false;
+        }
+        if(!invertible) {
+            Log.d(TAG, "Forward matrix 1 is not invertible, using identity");
+            forwardt1 = new ColorSpaceTransform(new Rational[]{
+                    new Rational(1,1), new Rational(0,1), new Rational(0,1),
+                    new Rational(0,1), new Rational(1,1), new Rational(0,1),
+                    new Rational(0,1), new Rational(0,1), new Rational(1,1)
+            });
+        }
+        invertible = true;
+        for (int i = 0; i < 3; i++) {
+            float sum = 0.0f;
+            for (int j = 0; j < 3; j++) {
+                if (forwardt2 != null)
+                    sum += Math.abs(forwardt2.getElement(i, j).floatValue());
+            }
+            if(sum == 0.0f) invertible = false;
+        }
+        if(!invertible) {
+            Log.d(TAG, "Forward matrix 1 is not invertible, using identity");
+            forwardt2 = new ColorSpaceTransform(new Rational[]{
+                    new Rational(1,1), new Rational(0,1), new Rational(0,1),
+                    new Rational(0,1), new Rational(1,1), new Rational(0,1),
+                    new Rational(0,1), new Rational(0,1), new Rational(1,1)
+            });
+        }
 
         Converter.convertColorspaceTransform(calibration1, calibrationTransform1);
         Converter.convertColorspaceTransform(calibration2, calibrationTransform2);
@@ -513,7 +615,7 @@ public class Parameters {
         return "parameters:\n" +
                 "\n hasGainMap=" + hasGainMap +
                 "\n FrameCount=" + FrameNumberSelector.frameCount +
-                "\n CameraID=" + PhotonCamera.getSettings().mCameraID +
+                "\n CameraID=" + cameraID +
                 "\n DenoiseOn=" + PhotonCamera.getSettings().hdrxNR +
                 "\n Sharp=" + FltFormat(PreferenceKeys.getSharpnessValue()) +
                 "\n Sat=" + FltFormat(PreferenceKeys.getSaturationValue()) +

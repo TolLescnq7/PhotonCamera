@@ -50,11 +50,11 @@
                     app:layout_constraintVertical_bias="0.0" />
 
             <!--    Block 1.2-->
-            <!--    Dummy reference view with ratio 3:4. This acts as an anchor view for bottom buttons-->
+            <!--    Dummy reference view with programmable aspect ratio. This acts as an anchor view for bottom buttons-->
             <FrameLayout
                     android:id="@+id/dummy_reference_view"
                     android:layout_width="match_parent"
-                    app:layout_constraintDimensionRatio="3:4"
+                    app:setAspectRatio="@{uimodel.dummyAspectRatio}"
                     android:layout_height="0dp"
                     tools:visibility="visible"
                     android:clickable="false"
@@ -84,6 +84,7 @@
                     setAuxButtonModel="@{auxmodel}"
                     setActiveId="@{auxmodel.currentCameraId}"
                     bindViewGroupChildrenRotate="@{uimodel}"
+                    hideAuxButtons="@{uimodel.settingsBarVisibility}"
                     android:layout_marginBottom="6dp" />
 
             <!--    Block 1.4-->
@@ -166,8 +167,7 @@
                 android:layout_height="wrap_content"
                 android:id="@+id/arrow_top"
                 android:src="@drawable/chevron_up"
-                android:background="@drawable/aux_container_background"
-                android:backgroundTint="@color/panel_transparency"
+                android:background="@null"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 android:layout_marginTop="16dp"
@@ -178,6 +178,24 @@
                 android:visibility="@{uimodel.settingsBarVisibility ? View.INVISIBLE : View.VISIBLE}"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintVertical_bias="0" />
+
+        <TextView
+                android:id="@+id/video_recording_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:layout_marginEnd="12dp"
+                android:textColor="@android:color/white"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:background="#88000000"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:visibility="gone"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

@@ -24,6 +24,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import com.particlesdevs.photoncamera.settings.TunableInjector;
+
 import static com.particlesdevs.photoncamera.processing.ImageSaverSelector.getImageSaver;
 import static com.particlesdevs.photoncamera.processing.ImageSaverSelector.init;
 
@@ -31,8 +33,10 @@ public class ImageSaver {
     /**
      * Image frame buffer
      */
-    public static final int JPG_QUALITY = 97;
+    public static final int JPG_QUALITY = 98;
     private static final String TAG = "ImageSaver";
+
+    public static final ImageSaverSettings SETTINGS = new ImageSaverSettings();
 
     public SaverImplementation implementation;
     private int imageFormat;
@@ -42,6 +46,10 @@ public class ImageSaver {
 
     public void setFrameCount(int desiredFrameCount){
         this.desiredFrameCount = desiredFrameCount;
+    }
+
+    public void setImageFormat(int imageFormat) {
+        this.imageFormat = imageFormat;
     }
 
     public void updateFrameCount(int desiredFrameCount){
@@ -56,6 +64,7 @@ public class ImageSaver {
     public ImageSaver(ProcessingEventsListener processingEventsListener) {
         implementation = new DefaultSaver(processingEventsListener);
         init(implementation);
+        TunableInjector.inject(SETTINGS);
     }
 
     public void initProcess(ImageReader mReader) {
@@ -92,16 +101,18 @@ public class ImageSaver {
     }
 
     public void runRaw(CameraCharacteristics characteristics, CaptureResult captureResult, CaptureRequest captureRequest, ArrayList<GyroBurst> burstShakiness, int cameraRotation, HashMap<Long, Double> exposures) {
+        TunableInjector.inject(SETTINGS);
         implementation.runRaw(imageFormat,characteristics,captureResult, captureRequest,burstShakiness,cameraRotation, exposures);
     }
 
-    public void unlimitedStart(CameraCharacteristics characteristics, CaptureResult captureResult, CaptureRequest captureRequest, int cameraRotation) {
+    public void processStart(CameraCharacteristics characteristics, CaptureResult captureResult, CaptureRequest captureRequest, int cameraRotation) {
+        TunableInjector.inject(SETTINGS);
         implementation = ImageSaverSelector.getImageSaver(ImageFormat.RAW_SENSOR, implementation);
-        implementation.unlimitedStart(imageFormat,characteristics,captureResult, captureRequest,cameraRotation);
+        implementation.processStart(imageFormat,characteristics,captureResult, captureRequest,cameraRotation);
     }
 
-    public void unlimitedEnd() {
-        implementation.unlimitedEnd();
+    public void processEnd() {
+        implementation.processEnd();
     }
 
     public static class Util {
@@ -121,6 +132,27 @@ public class ImageSaver {
                 return false;
             }
         }
+
+        /*public static boolean saveBitmapAsAVIF(Path fileToSave, Bitmap img, int jpgQuality, ParseExif.ExifData exifData) {
+            exifData.COMPRESSION = String.valueOf(jpgQuality);
+            try {
+                OutputStream outputStream = Files.newOutputStream(fileToSave);
+                //img.compress(Bitmap.CompressFormat.JPEG, jpgQuality, outputStream);
+                HeifCoder coder = new HeifCoder();
+                var buffer = coder.encodeAvif(img, jpgQuality, PreciseMode.LOSSY, AvifSpeed.EIGHT);
+                outputStream.write(buffer);
+                outputStream.flush();
+                outputStream.close();
+                img.recycle();
+                //ExifInterface inter = ParseExif.setAllAttributes(fileToSave.toFile(), exifData);
+                //inter.saveAttributes();
+                return true;
+            } catch (IOException e) {
+                //e.printStackTrace();
+                Log.d(TAG,"AVIF save error:"+Log.getStackTraceString(e));
+                return false;
+            }
+        }*/
 
         public static boolean saveBitmapAsPNG(Path fileToSave, Bitmap img, int pngQuality, ParseExif.ExifData exifData) {
             try {
@@ -164,6 +196,7 @@ public class ImageSaver {
             DngCreator dngCreator = new DngCreator();
             dngCreator.setParameters(parameters);
             dngCreator.setCompression(false);
+            //dngCreator.setBinning(true);
             try {
                 OutputStream outputStream = Files.newOutputStream(dngFilePath);
                 dngCreator.writeBuffer(outputStream, buffer, parameters.rawSize.x, parameters.rawSize.y);

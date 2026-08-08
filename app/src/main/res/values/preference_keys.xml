@@ -5,6 +5,12 @@
     <string name="pref_category_general_key" translatable="false">pref_category_general_key</string>
     <string name="pref_category_jpg_key" translatable="false">pref_category_jpg_key</string>
     <string name="pref_category_hdrx_key" translatable="false">pref_category_hdrx_key</string>
+    <string name="pref_category_photo_key" translatable="false">pref_category_photo_key</string>
+    <string name="pref_category_video_key" translatable="false">pref_category_video_key</string>
+    <string name="pref_category_rawvideo_key" translatable="false">pref_category_rawvideo_key</string>
+    <string name="pref_rawvideo_downscale_4x_key" translatable="false">pref_rawvideo_downscale_4x_key</string>
+    <string name="pref_rawvideo_write_zip_key" translatable="false">pref_rawvideo_write_zip_key</string>
+    <string name="pref_rawvideo_crop_169_key" translatable="false">pref_rawvideo_crop_169_key</string>
     <string name="pref_theme_category_key" translatable="false">pref_theme_category_key</string>
     <string name="pref_category_about_key" translatable="false">pref_category_about_key</string>
 
@@ -16,6 +22,7 @@
     <string name="pref_show_watermark_key" translatable="false">pref_show_watermark_key</string>
     <string name="pref_energy_safe_key" translatable="false">pref_energy_safe_key</string>
     <string name="pref_wide169_key" translatable="false">pref_wide169_key</string>
+    <string name="pref_binning_key" translatable="false">pref_binning_key</string>
     <string name="pref_enhanced_processing_key" translatable="false">pref_enhanced_processing_key</string>
     <string name="pref_hdrx_nr_key" translatable="false">pref_hdrx_nr_key</string>
     <string name="pref_save_raw_key" translatable="false">pref_save_raw_key</string>
@@ -37,6 +44,7 @@
     <string name="pref_align_method_key" translatable="false">pref_align_method_key</string>
     <string name="pref_color_method_key" translatable="false">pref_color_method_key</string>
     <string name="pref_peak_method_key" translatable="false">pref_peak_method_key</string>
+    <string name="pref_horizon" translatable="false">pref_horizon</string>
     <string name="pref_preview_format_key" translatable="false">pref_preview_format_key</string>
     <string name="pref_cfa_key" translatable="false">pref_cfa_key</string>
     <string name="pref_remosaic_key" translatable="false">pref_remosaic_key</string>
@@ -79,4 +87,7 @@
     <string name="pref_photoncamera" translatable="false">pref_photoncamera</string>
     <string name="pref_version_key" translatable="false">pref_version_key</string>
     <string name="pref_folders_list" translatable="false">pref_folders_list</string>
+    <string name="pref_hide_gallery_icon_key" translatable="false">pref_hide_gallery_icon_key</string>
+    <string name="pref_category_device_key" translatable="false">pref_category_device_key</string>
+    <string name="pref_fetch_configurations_key" translatable="false">pref_fetch_configurations_key</string>
 </resources>

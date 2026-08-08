@@ -95,6 +95,7 @@ public class HorizontalPicker extends View {
     private int previousScrollerX;
     private boolean scrollingX;
     private int pressedItem = -1;
+    private int lastTickItem = -1;
     private ColorStateList textColor;
     private final int selectedTextColor;
     private OnItemSelected onItemSelected;
@@ -107,6 +108,8 @@ public class HorizontalPicker extends View {
     private float dividerSize = 0;
     private int sideItems = 1;
     private TextDirectionHeuristicCompat textDir;
+    private final Matrix fadeMatrix = new Matrix();
+    private float fadeFraction;
 
     public HorizontalPicker(Context context) {
         this(context, null);
@@ -256,9 +259,13 @@ public class HorizontalPicker extends View {
         int saveCount = canvas.getSaveCount();
         canvas.save();
 
-        int selectedItem = this.selectedItem;
+        // Resolve the currently selected item from the live scroll position so the
+        // bubble tracks the finger during drag/fling instead of only on release.
+        int selectedItem = getSelectedItem();
 
         float itemWithPadding = itemWidth + dividerSize;
+
+        ensureFadeFraction();
 
         // translate horizontal to center
         canvas.translate(itemWithPadding * sideItems, 0);
@@ -318,7 +325,17 @@ public class HorizontalPicker extends View {
                     canvas.drawRoundRect(background, 100, 100, paint);
                 }
                 canvas.clipRect(clipBounds);
+                // apply the view-fixed edge fade so text smoothly fades out at the edges.
+                // the gradient carries the item's own color so the theme text color is preserved.
+                if (fadeFraction > 0f) {
+                    LinearGradient itemFade = createItemFadeShader(textPaint.getColor());
+                    float originX = itemWithPadding * sideItems + i * itemWithPadding - getScrollX();
+                    fadeMatrix.setTranslate(-originX, 0);
+                    itemFade.setLocalMatrix(fadeMatrix);
+                    textPaint.setShader(itemFade);
+                }
                 layout.draw(canvas);
+                textPaint.setShader(null);
 
                 if (marquee != null && i == selectedItem && marquee.shouldDrawGhost()) {
                     canvas.translate(marquee.getGhostOffset(), 0);
@@ -424,6 +441,113 @@ public class HorizontalPicker extends View {
     }
 
     /**
+     * Width (in item units) of the edge fade band on each side.
+     */
+    private static final float EDGE_FADE_ITEMS = 1.5f;
+
+    /**
+     * Fraction of the picker width that is interactive (touch zone). The faded
+     * edges outside this central band are ignored for touch. Kept separate from
+     * {@link #EDGE_FADE_ITEMS} so the fade size and touch area can be tuned
+     * independently.
+     */
+    private static final float TOUCH_AREA_FRACTION = 0.7f;
+
+    /**
+     * How strongly touch movement is compressed around item centers and expanded
+     * between them. The per-position gain is {@code 1 - amplitude} exactly at an
+     * item center and {@code 1 + amplitude} halfway between items, so the average
+     * gain over one full item period is exactly 1 and the overall travel distance
+     * (items scrolled per distance of finger travel) is preserved.
+     */
+    private static final float TOUCH_WARP_AMPLITUDE = 0.25f;
+
+    /**
+     * Global scale applied to touch movement before the periodic warp. Values
+     * greater than 1 make the picker scroll further for a given finger travel
+     * (more items per swipe); values below 1 reduce travel. Combine with
+     * {@link #TOUCH_WARP_AMPLITUDE} to tune feel.
+     */
+    private static final float TOUCH_TRAVEL_MULTIPLIER = 1.0f;
+
+    /**
+     * Recomputes the fraction of the picker width that fades out at each edge.
+     */
+    private void ensureFadeFraction() {
+        int width = getWidth();
+        if (width <= 0 || itemWidth <= 0) {
+            fadeFraction = 0f;
+            return;
+        }
+        float band = (itemWidth + dividerSize) * EDGE_FADE_ITEMS;
+        fadeFraction = Math.min(0.45f, band / width);
+    }
+
+    /**
+     * Builds a view-fixed horizontal gradient that fades the given item color out
+     * towards the left/right edges of the picker, preserving its RGB. The alpha
+     * drops off steeply (via intermediate stops) so the edges are clearly faded.
+     */
+    private LinearGradient createItemFadeShader(int color) {
+        int width = getWidth();
+        float f = fadeFraction;
+        int transparent = color & 0x00FFFFFF;
+        int dim = (color & 0x00FFFFFF) | 0x2E000000;
+        return new LinearGradient(0, 0, width, 0,
+                new int[]{transparent, dim, color, color, dim, transparent},
+                new float[]{0f, f * 0.5f, f, 1f - f, 1f - f * 0.5f, 1f},
+                Shader.TileMode.CLAMP);
+    }
+
+    /**
+     * Returns true when a touch at the given x coordinate lands outside the
+     * reduced interactive area (touch zone) in the center of the picker.
+     */
+    private boolean isTouchOutsideInteractiveArea(float x) {
+        int width = getWidth();
+        if (width <= 0 || TOUCH_AREA_FRACTION <= 0f || TOUCH_AREA_FRACTION >= 1f) {
+            return false;
+        }
+        float inset = width * (1f - TOUCH_AREA_FRACTION) / 2f;
+        return x < inset || x > width - inset;
+    }
+
+    /**
+     * Maps a raw finger movement into a scroll delta using a periodic, non-uniform
+     * gain. Movement is compressed while an item is centered and decompressed in
+     * between, but the gain integrates to 1 over each full item period so the same
+     * distance of finger travel still scrolls the same overall number of items.
+     *
+     * @param rawDelta Raw finger movement (pixels) since the last move event
+     * @return Scroll delta (pixels) to apply
+     */
+    private int getWarpedScrollDelta(float rawDelta) {
+        float period = itemWidth + dividerSize;
+        if (period <= 0f || rawDelta == 0f) {
+            return (int) rawDelta;
+        }
+
+        // Subdivide the movement so the position-dependent gain is integrated
+        // accurately instead of being applied once against the start position.
+        int steps = Math.max(1, (int) Math.ceil(Math.abs(rawDelta) / (period / 32f)));
+        float step = rawDelta / steps;
+        float total = 0f;
+        float x = getScrollX();
+        for (int i = 0; i < steps; i++) {
+            float phase = x % period;
+            if (phase < 0f) {
+                phase += period;
+            }
+            float gain = 1f - TOUCH_WARP_AMPLITUDE
+                    * (float) Math.cos(Math.PI * 2f * phase / period);
+            float d = step * gain * TOUCH_TRAVEL_MULTIPLIER;
+            total += d;
+            x += d;
+        }
+        return Math.round(total);
+    }
+
+    /**
      * Calculates text color for specified item based on its position and state.
      *
      * @param item Index of item to get text color for
@@ -436,9 +560,10 @@ public class HorizontalPicker extends View {
         // set color of text
         int color = textColor.getDefaultColor();
         int itemWithPadding = (int) (itemWidth + dividerSize);
-        if (scrollX > itemWithPadding * item - itemWithPadding / 2 &&
-                scrollX < itemWithPadding * (item + 1) - itemWithPadding / 2) {
-            int position = scrollX - itemWithPadding / 2;
+        int center = (int) (itemWithPadding * item + getItemCenterBias());
+        if (scrollX > center - itemWithPadding / 2 &&
+                scrollX < center + itemWithPadding / 2) {
+            int position = scrollX - (center - itemWithPadding / 2);
             color = getColor(position, item);
         } else if (item == pressedItem) {
             color = textColor.getColorForState(new int[]{android.R.attr.state_pressed}, color);
@@ -473,7 +598,7 @@ public class HorizontalPicker extends View {
 
                 float currentMoveX = event.getX();
 
-                int deltaMoveX = (int) (lastDownEventX - currentMoveX);
+                int deltaMoveX = getWarpedScrollDelta(lastDownEventX - currentMoveX);
 
                 if (scrollingX ||
                         (Math.abs(deltaMoveX) > touchSlop) && values != null && values.length > 0) {
@@ -494,7 +619,7 @@ public class HorizontalPicker extends View {
                     }
 
                     final float pulledToX = getScrollX() + deltaMoveX;
-                    if (pulledToX < 0) {
+                    if (pulledToX < (int) getItemCenterBias()) {
                         if (leftEdgeEffect != null) {
                             leftEdgeEffect.onPull((float) deltaMoveX / getWidth());
                             if (!rightEdgeEffect.isFinished()) {
@@ -511,12 +636,26 @@ public class HorizontalPicker extends View {
                     }
 
                     lastDownEventX = currentMoveX;
+
+                    // tick whenever a new item becomes selected while dragging
+                    int currentItem = getSelectedItem();
+                    if (currentItem != lastTickItem) {
+                        lastTickItem = currentItem;
+                        vibration.Tick();
+                    }
+
                     invalidate();
 
                 }
 
                 break;
             case MotionEvent.ACTION_DOWN:
+
+                // only handle touches in the central touch zone;
+                // the edges should not respond to touch
+                if (isTouchOutsideInteractiveArea(event.getX())) {
+                    return false;
+                }
 
                 if (!adjustScrollerX.isFinished()) {
                     adjustScrollerX.forceFinished(true);
@@ -527,6 +666,8 @@ public class HorizontalPicker extends View {
                 }
 
                 lastDownEventX = event.getX();
+
+                lastTickItem = getSelectedItem();
 
                 if (!scrollingX) {
                     pressedItem = getPositionFromTouch(event.getX());
@@ -547,11 +688,20 @@ public class HorizontalPicker extends View {
                     if (!scrollingX) {
 
                         int itemPos = getPositionOnScreen(positionX);
-                        int relativePos = itemPos - sideItems;
+                        int relativePos = itemPos - getSelectedItem();
 
                         if (relativePos == 0) {
                             selectItem();
                         } else {
+                            // tapped a mode directly: vibrate right away so the
+                            // feedback is immediate instead of waiting for the
+                            // scroll animation to settle
+                            int tappedItem = getSelectedItem() + relativePos;
+                            if (tappedItem >= 0 && tappedItem < values.length
+                                    && tappedItem != lastTickItem) {
+                                lastTickItem = tappedItem;
+                                vibration.Tick();
+                            }
                             smoothScrollBy(relativePos);
                         }
 
@@ -777,7 +927,8 @@ public class HorizontalPicker extends View {
         super.scrollTo(scrollX, scrollY);
 
         if (!flingScrollerX.isFinished() && clampedX) {
-            flingScrollerX.springBack(scrollX, scrollY, 0, getScrollRange(), 0, 0);
+            flingScrollerX.springBack(scrollX, scrollY,
+                    (int) getItemCenterBias(), getScrollRange(), 0, 0);
         }
     }
 
@@ -787,7 +938,9 @@ public class HorizontalPicker extends View {
     }
 
     private int getPositionFromTouch(float x) {
-        return getPositionFromCoordinates((int) (getScrollX() - (itemWidth + dividerSize) * (sideItems + .5f) + x));
+        float itemWithPadding = itemWidth + dividerSize;
+        float content = x + getScrollX() - itemWithPadding * (sideItems + 0.5f);
+        return Math.round(content / itemWithPadding);
     }
 
     private void computeScrollX() {
@@ -807,7 +960,8 @@ public class HorizontalPicker extends View {
             }
 
             int range = getScrollRange();
-            if (previousScrollerX >= 0 && currentScrollerX < 0) {
+            int minX = (int) getItemCenterBias();
+            if (previousScrollerX >= minX && currentScrollerX < minX) {
                 if (leftEdgeEffect != null)//Vibhor
                     leftEdgeEffect.onAbsorb((int) scroller.getCurrVelocity());
             } else if (previousScrollerX <= range && currentScrollerX > range) {
@@ -831,8 +985,10 @@ public class HorizontalPicker extends View {
     private void flingX(int velocityX) {
 
         previousScrollerX = Integer.MIN_VALUE;
-        flingScrollerX.fling(getScrollX(), getScrollY(), -velocityX, 0, 0,
-                (int) (itemWidth + dividerSize) * (values.length - 1), 0, 0, getWidth() / 2, 0);
+        int minX = (int) getItemCenterBias();
+        int maxX = minX + (int) (itemWidth + dividerSize) * (values.length - 1);
+        flingScrollerX.fling(getScrollX(), getScrollY(), -velocityX, 0, minX, maxX,
+                0, 0, getWidth() / 2, 0);
 
         invalidate();
     }
@@ -840,17 +996,23 @@ public class HorizontalPicker extends View {
     private void adjustToNearestItemX() {
 
         int x = getScrollX();
-        int item = Math.round(x / (itemWidth + dividerSize));
+        int item = getPositionFromCoordinates(x);
 
         if (item < 0) {
             item = 0;
-        } else if (item > values.length) {
-            item = values.length;
+        } else if (item > values.length - 1) {
+            item = values.length - 1;
         }
 
         selectedItem = item;
 
-        int itemX = (itemWidth + (int) dividerSize) * item;
+        // tick when a new item settles after a scroll/fling/press
+        if (item != lastTickItem) {
+            lastTickItem = item;
+            vibration.Tick();
+        }
+
+        int itemX = (int) ((itemWidth + dividerSize) * item + getItemCenterBias());
 
         int deltaX = itemX - x;
 
@@ -863,7 +1025,9 @@ public class HorizontalPicker extends View {
 
         int items = sideItems * 2 + 1;
         int totalPadding = ((int) dividerSize * (items - 1));
-        itemWidth = (w - totalPadding) / items;
+        int sizeBasedWidth = (w - totalPadding) / items;
+
+        itemWidth = Math.max(sizeBasedWidth, computeRequiredItemWidth());
 
         itemClipBounds = new RectF(0, 0, itemWidth, h);
         itemClipBoundsOffset = new RectF(itemClipBounds);
@@ -873,6 +1037,44 @@ public class HorizontalPicker extends View {
         remakeLayout();
         startMarqueeIfNeeded();
 
+    }
+
+    /**
+     * Computes the minimum item (bubble) width required to fully render the
+     * widest value, so text is never truncated by ellipsis/clipping even at high
+     * DPI. Measurement mirrors the drawing state (fake bold included) and adds
+     * breathing room so the bubble stays slightly larger than the text.
+     */
+    private int computeRequiredItemWidth() {
+        if (values == null || values.length == 0) {
+            return 0;
+        }
+        textPaint.setFakeBoldText(true);
+        float maxTextWidth = 0f;
+        for (CharSequence value : values) {
+            maxTextWidth = Math.max(maxTextWidth,
+                    textPaint.measureText(value, 0, value.length()));
+        }
+        textPaint.setFakeBoldText(false);
+        float density = getResources().getDisplayMetrics().density;
+        return (int) Math.ceil(maxTextWidth + 12f * density);
+    }
+
+    /**
+     * Scroll offset that must be added to {@code index * itemWithPadding} so the
+     * bubble of item {@code index} sits exactly in the middle of the view. This is
+     * zero only when the item grid exactly fills the view width
+     * ({@code itemWidth * (2 * sideItems + 1) == width}); once items are sized to
+     * fit their text and are wider than the per-slot width, the resting scroll
+     * position needs this offset to keep the selected bubble centered.
+     */
+    private float getItemCenterBias() {
+        int width = getWidth();
+        if (width <= 0) {
+            return 0f;
+        }
+        float itemWithPadding = itemWidth + dividerSize;
+        return itemWithPadding * (sideItems + 0.5f) - width / 2f;
     }
 
     private void onScrollerFinishedX(OverScroller scroller) {
@@ -919,7 +1121,7 @@ public class HorizontalPicker extends View {
     }
 
     private int getPositionOnScreen(float x) {
-        return (int) (x / (itemWidth + dividerSize));
+        return getPositionFromTouch(x);
     }
 
     private void smoothScrollBy(int i) {
@@ -985,7 +1187,7 @@ public class HorizontalPicker extends View {
      * @return Selected item from scrolling position in {param x}
      */
     private int getPositionFromCoordinates(int x) {
-        return Math.round(x / (itemWidth + dividerSize));
+        return Math.round((x - getItemCenterBias()) / (itemWidth + dividerSize));
     }
 
     /**
@@ -994,7 +1196,7 @@ public class HorizontalPicker extends View {
      * @param index Index of an item to scroll to
      */
     private void scrollToItem(int index) {
-        scrollTo((itemWidth + (int) dividerSize) * index, 0);
+        scrollTo((int) ((itemWidth + dividerSize) * index + getItemCenterBias()), 0);
         // invalidate() not needed because scrollTo() already invalidates the view
     }
 
@@ -1020,10 +1222,13 @@ public class HorizontalPicker extends View {
      */
     private int getInBoundsX(int x) {
 
-        if (x < 0) {
-            x = 0;
-        } else if (x > ((itemWidth + (int) dividerSize) * (values.length - 1))) {
-            x = ((itemWidth + (int) dividerSize) * (values.length - 1));
+        int minX = (int) getItemCenterBias();
+        int maxX = minX + (int) ((itemWidth + dividerSize) * (values.length - 1));
+
+        if (x < minX) {
+            x = minX;
+        } else if (x > maxX) {
+            x = maxX;
         }
         return x;
     }
@@ -1031,7 +1236,8 @@ public class HorizontalPicker extends View {
     private int getScrollRange() {
         int scrollRange = 0;
         if (values != null && values.length != 0) {
-            scrollRange = Math.max(0, ((itemWidth + (int) dividerSize) * (values.length - 1)));
+            scrollRange = (int) getItemCenterBias()
+                    + (int) ((itemWidth + dividerSize) * (values.length - 1));
         }
         return scrollRange;
     }

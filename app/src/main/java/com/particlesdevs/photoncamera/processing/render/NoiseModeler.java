@@ -11,6 +11,7 @@ public class NoiseModeler {
     public Pair<Double,Double>[] computeModel;
     public int AnalogueISO;
     public int SensivityISO;
+    double adaptiveMpy = 1.0;
     public NoiseModeler(Pair<Double,Double>[] inModel, Integer analogISO, Integer ISO, int bayer, SpecificSettingSensor specificSettingSensor) {
         AnalogueISO = analogISO;
         SensivityISO = ISO;
@@ -77,15 +78,17 @@ public class NoiseModeler {
         Log.d(TAG, "ComputedNoiseModel1->" + computeModel[1]);
         Log.d(TAG, "ComputedNoiseModel2->" + computeModel[2]);
     }
+    public void setAdaptiveMpy(double mpy){
+        adaptiveMpy = mpy;
+    }
 
     public void computeStackingNoiseModel(){
         computeStackingNoiseModel(FrameNumberSelector.frameCount);
     }
     public void computeStackingNoiseModel(int FrameCnt){
-        double noiseRemove = Math.pow(FrameCnt,0.9);
-        computeModel[0] = new Pair<>(baseModel[0].first/noiseRemove,baseModel[0].second/(Math.pow(noiseRemove,1.0)));
-        computeModel[1] = new Pair<>(baseModel[1].first/noiseRemove,baseModel[1].second/(Math.pow(noiseRemove,1.0)));
-        computeModel[2] = new Pair<>(baseModel[2].first/noiseRemove,baseModel[2].second/(Math.pow(noiseRemove,1.0)));
+        computeModel[0] = new Pair<>(adaptiveMpy * baseModel[0].first/ (FrameCnt*0.9),adaptiveMpy * baseModel[0].second/ (FrameCnt*0.9));
+        computeModel[1] = new Pair<>(adaptiveMpy * baseModel[1].first/ (FrameCnt*0.9),adaptiveMpy * baseModel[1].second/ (FrameCnt*0.9));
+        computeModel[2] = new Pair<>(adaptiveMpy * baseModel[2].first/ (FrameCnt*0.9),adaptiveMpy * baseModel[2].second/ (FrameCnt*0.9));
     }
     private double computeNoiseModelS(double Sensitivity,Pair<Double,Double> sGenerator) {
         double returning = sGenerator.first * Sensitivity + sGenerator.second;
@@ -96,6 +99,15 @@ public class NoiseModeler {
             //returning=-returning;
         }
         return returning;
+    }
+
+    public double SPlace(double Sensitivity) {
+        return 4.2917797046733595e-07 * Sensitivity + 6.293375122210356e-06;
+    }
+
+    public double OPlace(double Sensitivity) {
+        double dGain = Math.max(Sensitivity/AnalogueISO,1.0);
+        return (2.18746307756334e-13 * Sensitivity*Sensitivity) + (2.1731291715765075e-07*dGain*dGain);
     }
 
     private double computeNoiseModelO(double Sensitivity,Pair<Double,Double> oGenerator) {

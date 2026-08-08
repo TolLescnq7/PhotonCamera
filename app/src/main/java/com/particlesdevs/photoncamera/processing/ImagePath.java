@@ -10,16 +10,18 @@ import java.util.Date;
 import java.util.Locale;
 
 public class ImagePath {
-    public static String generateNewFileName() {
-        return "IMG_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+    public static String generateNewFileName(String prefix) {
+        return prefix + "_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
     }
+
+
 
     public static Path newDNGFilePath() {
         return getNewImageFilePath("dng");
     }
 
-    public static Path newJPGFilePath() {
-        return getNewImageFilePath("jpg");
+    public static Path newImageFilePath() {
+        return getNewImageFilePath("");
     }
 
     public static Path getNewImageFilePath(String extension) {
@@ -27,6 +29,20 @@ public class ImagePath {
         if (extension.equalsIgnoreCase("dng")) {
             dir = FileManager.sPHOTON_RAW_DIR;
         }
-        return Paths.get(dir.getAbsolutePath(), generateNewFileName() + '.' + extension);
+        if(!extension.isEmpty()) {
+            return Paths.get(dir.getAbsolutePath(), generateNewFileName("IMG") + '.' + extension);
+        } else {
+            return Paths.get(dir.getAbsolutePath(), generateNewFileName("IMG"));
+        }
+    }
+
+    public static Path getNewImageFolderPath() {
+        File dir = FileManager.sPHOTON_RAW_DIR;
+        return Paths.get(dir.getAbsolutePath(), generateNewFileName("IMG"));
+    }
+
+    public static Path getNewVideoFolderPath() {
+        File dir = FileManager.sPHOTON_RAW_DIR;
+        return Paths.get(dir.getAbsolutePath(), generateNewFileName("VID"));
     }
 }

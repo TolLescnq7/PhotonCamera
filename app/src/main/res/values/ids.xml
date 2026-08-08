@@ -10,8 +10,10 @@
     <item name="flash_odd_button" type="id"/>
     <item name="flash_auto_button" type="id"/>
     <item name="flash_on_button" type="id"/>
-    <item name="fps60_off_button" type="id"/>
-    <item name="fps60_on_button" type="id"/>
+    <item name="fps_auto_button" type="id"/>
+    <item name="fps24_button" type="id"/>
+    <item name="fps30_button" type="id"/>
+    <item name="fps60_button" type="id"/>
     <item name="timer_off_button" type="id"/>
     <item name="timer3s_button" type="id"/>
     <item name="timer10s_button" type="id"/>
@@ -38,4 +40,8 @@
     <item name="btsvr_on_button" type="id"/>
     <item name="btsvr_off_button" type="id"/>
     <item name="batterysaver_entry_layout" type="id"/>
+    <item name="bracketing_entry_layout" type="id"/>
+    <item name="bracketing_off_button" type="id"/>
+    <item name="bracketing_normal_button" type="id"/>
+    <item name="bracketing_high_button" type="id"/>
 </resources>
